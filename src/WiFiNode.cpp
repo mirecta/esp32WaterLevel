@@ -10,6 +10,13 @@
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
 
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+#include <Arduino.h>
+#include <Fonts/FreeSans24pt7b.h>
+
+
 //111.110
 //mosquitto_sub -v -u 'user' -P 'test' -t '#'
 //mosquitto_pub  -u 'user' -P 'test' -t "smarthome/room1/led" -m "{'led':1}" -r
@@ -25,6 +32,7 @@ int led=2;
 /* create an instance of WiFiClientSecure */
 WiFiClientSecure espClient;
 PubSubClient client(espClient);
+Adafruit_SSD1306 display(128, 64, &Wire, -1);
 
 long lastMsg = 0;
 char msg[200];
@@ -93,6 +101,19 @@ void setup()
   /* this receivedCallback function will be invoked 
   when client received subscribed topic */
   client.setCallback(receivedCallback);
+
+  display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
+  // Clear the buffer
+  display.clearDisplay();
+  
+  
+  display.setFont(&FreeSans24pt7b);
+  display.setCursor(0, 60);
+  display.setTextColor(SSD1306_WHITE);
+  int a = 234;
+  display.print(a);
+  display.print(" l");
+  display.display();
 }
 void loop()
 {
