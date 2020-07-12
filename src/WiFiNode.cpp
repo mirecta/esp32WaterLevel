@@ -14,30 +14,32 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <Arduino.h>
-#include <Fonts/FreeSans24pt7b.h>
+//#include <Fonts/FreeSans24pt7b.h>
+#include <Fonts/FreeSans18pt7b.h>
 
 
 //111.110
 //mosquitto_sub -v -u 'user' -P 'test' -t '#'
-//mosquitto_pub  -u 'user' -P 'test' -t "smarthome/room1/led" -m "{'led':1}" -r
-//mosquitto_pub  -u 'user' -P 'test' -t "smarthome/room1/led" -m "{'led':0}" -r
+//mosquitto_pub  -u 'user' -P 'test' -t "hornany/water1/led" -m "{'led':1}" -r
+//mosquitto_pub  -u 'user' -P 'test' -t "hornany/water1/led" -m "{'led':0}" -r
 
 /* topics */
-#define COUNTER_TOPIC    "smarthome/room1/counter"
-#define LED_TOPIC     "smarthome/room1/led" /* 1=on, 0=off */
+#define LEVEL_TOPIC    "hornany/water1/level"
+#define LED_TOPIC     "hornany/water1/led" /* 1=on, 0=off */
+#define US_TRIG   19
+#define US_ECHO   18
+#define PIN_LED 2
 
 ESP32Config_t esp32Config;
-int led=2;
 
 /* create an instance of WiFiClientSecure */
 WiFiClientSecure espClient;
 PubSubClient client(espClient);
 Adafruit_SSD1306 display(128, 64, &Wire, -1);
 
-long lastMsg = 0;
 char msg[200];
 int counter = 0;
-
+int lastMsg = 0;
 
 
 void receivedCallback(char* topic, byte* payload, unsigned int length) {
@@ -53,10 +55,10 @@ void receivedCallback(char* topic, byte* payload, unsigned int length) {
   deserializeJson(doc, payload, length);
   /* we got '1' -> on */
   if (doc["led"] == 1){
-    digitalWrite(led, HIGH); 
+    digitalWrite(PIN_LED, HIGH); 
   } else {
     /* we got '0' -> on */
-    digitalWrite(led, LOW);
+    digitalWrite(PIN_LED, LOW);
   }
 
 }
@@ -94,7 +96,12 @@ void setup()
     Serial.println(esp32Config.mqtt);
 
     Serial.println(WiFi.dnsIP(0).toString());
-    pinMode(led, OUTPUT);
+    pinMode(PIN_LED, OUTPUT);
+    pinMode(US_TRIG,OUTPUT);
+    pinMode(US_ECHO,INPUT);
+
+
+
 
       /* configure the MQTT server with IPaddress and port */
   client.setServer(esp32Config.mqtt, esp32Config.mqtt_port);
@@ -107,14 +114,17 @@ void setup()
   display.clearDisplay();
   
   
-  display.setFont(&FreeSans24pt7b);
+  //display.setFont(&FreeSans24pt7b);
+  display.setFont(&FreeSans18pt7b);
   display.setCursor(0, 60);
   display.setTextColor(SSD1306_WHITE);
-  int a = 234;
-  display.print(a);
-  display.print(" l");
-  display.display();
+
 }
+
+long duration;
+int distance;
+int last;
+//distance = (echo_high_time_in_µs / 1000000.0) * 17015
 void loop()
 {
  /* if client was disconnected then try to reconnect again */
@@ -127,18 +137,34 @@ void loop()
   /* we increase counter every 3 secs
   we count until 3 secs reached to avoid blocking program if using delay()*/
   long now = millis();
-  if (now - lastMsg > 3000) {
-    lastMsg = now;
-    if (counter < 100) {
+  if (now - lastMsg > 1000) {
+      lastMsg = now;
+      // Clear the trigPin by setting it LOW:
+      digitalWrite(US_TRIG, LOW);
+      
+      delayMicroseconds(5);
+    // Trigger the sensor by setting the trigPin high for 10 microseconds:
+      digitalWrite(US_TRIG, HIGH);
+      delayMicroseconds(10);
+      digitalWrite(US_TRIG, LOW);
+      
+      // Read the echoPin. pulseIn() returns the duration (length of the pulse) in microseconds:
+      duration = pulseIn(US_ECHO, HIGH);
+      
+      // Calculate the distance:
+      distance = duration*0.034/2;
+      display.clearDisplay();
+      display.setCursor(0, 60);
+      display.print(distance+2);
+      display.print(" cm");
+      display.display();
       counter++;
-      snprintf (msg, 20, "%d", counter);
-      StaticJsonDocument<200> doc;
-      doc["counter"] = counter;
-      size_t n = serializeJson(doc, msg);
-      /* publish the message */
-      client.publish(COUNTER_TOPIC, msg,true);
-    }else {
-      counter = 0;  
-    }
+      if (last == distance && counter % 300 == 0){
+        StaticJsonDocument<200> doc;
+        doc["level"] = distance;
+        size_t n = serializeJson(doc, msg);
+        client.publish(LEVEL_TOPIC, msg,true);
+      }
+      last = distance;
   }
 }
